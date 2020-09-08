@@ -1,0 +1,126 @@
+version: '3.7'
+
+x-airflow-db-config: &db-config
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB}
+
+x-airflow-config: &airflow-config
+  <<: *db-config
+  AIRFLOW__CORE__DAGS_FOLDER: /dags
+  AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: 60
+  AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT: 120
+  AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Moscow
+
+  POSTGRES_USER: airflow
+  AIRFLOW__CORE__EXECUTOR: DebugExecutor
+  AIRFLOW__DEBUG__FAIL_FAST: "True"
+  AIRFLOW__CORE__FERNET_KEY: MJNz36Q8222VOQhBOmBROFrmeSxNOgTCMaVp2_HOtE0=
+  AIRFLOW__CORE__HOSTNAME_CALLABLE: airflow.utils.net:get_host_ip_address
+  AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgres+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@airflow-db:5432/${POSTGRES_DB}
+
+  AIRFLOW__CORE__PARALLELISM: 16
+  AIRFLOW__CORE__DAG_CONCURRENCY: 4
+  AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: 2
+
+  AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+  AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: 'False'
+
+  AIRFLOW__EMAIL__DEFAULT_EMAIL_ON_RETRY: 'False'
+  AIRFLOW__EMAIL__DEFAULT_EMAIL_ON_FAILURE: 'False'
+
+  #AIRFLOW__CELERY__BROKER_URL: redis://broker:6379/0
+  #AIRFLOW__CELERY__OPERATION_TIMEOUT: 10
+  #AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@airflow-db/${POSTGRES_DB}
+  #AIRFLOW__CELERY__WORKER_CONCURRENCY: 2
+
+
+x-airflow-base: &airflow-base
+  image: apache/airflow:1.10.12
+  entrypoint: /bin/bash
+  restart: always
+  volumes:
+    - airflow:/opt/airflow/:rw
+    - ./dags:/dags/:rw
+    - ./requirements.txt:/requirements.txt
+
+
+
+services:
+  # Redis as a Celery broker
+  #broker:
+  #  image: redis:6.0.7-alpine
+  #  
+  #  volumes:
+  #    - airflow-redis:/data
+
+
+  # DB for the Airflow metadata
+  airflow-db:
+    image: postgres:13
+
+    environment:
+      <<: *db-config
+
+    ports:
+      - 5432:5432
+
+    volumes:
+      - airflow-db:/var/lib/postgresql/data
+
+
+  # Main container with Airflow Webserver, Scheduler, Celery Flower
+  airflow:
+    <<: *airflow-base
+
+    environment:
+      <<: *db-config
+      <<: *airflow-config
+
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: 30
+      AIRFLOW__SCHEDULER__CATCHUP_BY_DEFAULT: 'False'
+      AIRFLOW__SCHEDULER__MAX_THREADS: 8
+
+      AIRFLOW__WEBSERVER__LOG_FETCH_TIMEOUT_SEC: 30
+      AIRFLOW__WEBSERVER__LOG_FETCH_DELAY_SEC: 10
+
+    depends_on:
+      - airflow-db
+    #  - broker
+
+    command: >
+      -c " sleep 10 &&
+           pip install --user -r /requirements.txt &&
+           /entrypoint initdb &&
+          (/entrypoint webserver &) &&
+          (/entrypoint flower &) &&
+           /entrypoint scheduler"
+
+    ports:
+      # Celery Flower
+      - 5555:5555
+      # Airflow Webserver
+      - 8080:8080
+
+
+  # Celery worker, will be scaled using `--scale=n`
+  #worker:
+  #  <<: *airflow-base
+
+  #  environment:
+  #    <<: *airflow-config
+
+  #  command: >
+  #    -c " sleep 10 &&
+  #         pip install --user -r /requirements.txt &&
+  #         /entrypoint worker"
+    
+  #  depends_on:
+  #    - airflow
+  #    - airflow-db
+  #    - broker
+
+volumes:
+  airflow-db:
+  #airflow-redis:
+  airflow:
