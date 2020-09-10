@@ -7,10 +7,12 @@ x-airflow-db-config: &db-config
 
 x-airflow-config: &airflow-config
   <<: *db-config
-  AIRFLOW__CORE__DAGS_FOLDER: /dags
+  AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
   AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: 60
   AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT: 120
-  AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Moscow
+  AIRFLOW__ADMIN__HIDE_SENSITIVE_VARIABLE_FIELDS: 'False'
+  AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: "Europe/Moscow"
+  AIRFLOW__CORE__DEFAULT_TIMEZONE: 'Europe/Moscow'
 
   POSTGRES_USER: airflow
   AIRFLOW__CORE__EXECUTOR: DebugExecutor
@@ -40,8 +42,8 @@ x-airflow-base: &airflow-base
   entrypoint: /bin/bash
   restart: always
   volumes:
-    - airflow:/opt/airflow/:rw
-    - ./dags:/dags/:rw
+    - airflow-test:/opt/airflow/:rw
+    - ./dags:/opt/airflow/dags/:rw
     - ./requirements.txt:/requirements.txt
 
 
@@ -57,6 +59,7 @@ services:
 
   # DB for the Airflow metadata
   airflow-db:
+    container_name: airflow-db-test
     image: postgres:13
 
     environment:
@@ -66,11 +69,12 @@ services:
       - 5432:5432
 
     volumes:
-      - airflow-db:/var/lib/postgresql/data
+      - airflow-db-test:/var/lib/postgresql/data
 
 
   # Main container with Airflow Webserver, Scheduler, Celery Flower
   airflow:
+    container_name: airflow-test
     <<: *airflow-base
 
     environment:
@@ -90,15 +94,15 @@ services:
 
     command: >
       -c " sleep 10 &&
+           pip install --user --upgrade pip &&
            pip install --user -r /requirements.txt &&
            /entrypoint initdb &&
           (/entrypoint webserver &) &&
-          (/entrypoint flower &) &&
            /entrypoint scheduler"
 
     ports:
       # Celery Flower
-      - 5555:5555
+      #- 5555:5555
       # Airflow Webserver
       - 8080:8080
 
@@ -121,6 +125,6 @@ services:
   #    - broker
 
 volumes:
-  airflow-db:
+  airflow-db-test:
   #airflow-redis:
-  airflow:
+  airflow-test:

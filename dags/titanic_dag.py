@@ -50,3 +50,7 @@ with DAG(dag_id='titanic_pivot', default_args=args, schedule_interval=None) as d
     )
 
     create_titanic_dataset >> pivot_titanic_dataset
+
+if __name__ == '__main__':
+  dag.clear(reset_dag_runs=True)
+  dag.run()

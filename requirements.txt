@@ -3,3 +3,5 @@ psycopg2-binary
 pymssql
 requests_toolbelt
 vertica_python
+lxml==4.2.5
+zeep[async]
